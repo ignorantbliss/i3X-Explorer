@@ -232,7 +232,9 @@ export class I3XClient {
           for (const envelope of item.result) {
             // As of commit 27f15c7, each entry is { sourceRelationship, object: {...} }
             const obj = (envelope.object ?? envelope) as Record<string, unknown>
-            objects.push(normalizeV1Object(obj))
+            const oi = normalizeV1Object(obj)
+            oi.sourceRelationship = envelope.sourceRelationship as string | undefined
+            objects.push(oi)
           }
         }
       }

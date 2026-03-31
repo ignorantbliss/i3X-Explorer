@@ -18,7 +18,7 @@ export function ObjectDetail({ object }: ObjectDetailProps) {
   const [isRawDataExpanded, setIsRawDataExpanded] = useState(false)
 
   const { activeSubscriptionId, addMonitoredItem, setBottomPanelExpanded } = useSubscriptionsStore()
-  const { selectItem, allObjects } = useExplorerStore()
+  const { selectItem, allObjects,setAllObjects } = useExplorerStore()
 
   useEffect(() => {
     loadValue()
@@ -42,14 +42,34 @@ export function ObjectDetail({ object }: ObjectDetailProps) {
   }
 
   const selectObject = async (ro: RelatedObject) => {
+    if (allObjects.length == 0)
+    {
+      const client = getClient()
+      if (client != null)
+      {
+        const objects = await client.getObjects()
+        setAllObjects(objects)
+
+        let results = objects.filter((itm) => {
+          if (ro.elementId == itm.elementId) return true;
+          return false;
+        })    
+            
+        if (results.length > 0)
+        {
+          selectItem({type:"object",id: "",data: results[0]} as SelectedItem)    
+        }
+      }
+    }
     let results = allObjects.filter((itm) => {
       if (ro.elementId == itm.elementId) return true;
       return false;
-
-    })
+    })    
         
     if (results.length > 0)
+    {
       selectItem({type:"object",id: "",data: results[0]} as SelectedItem)    
+    }
   }
 
   const handleSubscribe = async () => {
