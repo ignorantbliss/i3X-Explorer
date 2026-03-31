@@ -1,18 +1,20 @@
-import { useState, useEffect, useMemo } from 'react'
-import type { ObjectInstance } from '../../api/types'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import type { ObjectInstance,RelationshipType } from '../../api/types'
 import { getClient } from '../../api/client'
+import { useExplorerStore } from '../../stores/explorer'
 
 interface RelationshipGraphProps {
   object: ObjectInstance
+  onNodeClick?: (node: RelatedObject) => void
 }
 
-interface RelatedObject {
+export interface RelatedObject {
   elementId: string
   displayName: string
   typeId: string
   isComposition: boolean
   parentId?: string | null
-  relationshipType: string
+  relationshipTypes: [string]
 }
 
 // Layout constants
@@ -34,12 +36,16 @@ const COLORS = {
   border:    'rgb(var(--i3x-border))',
   text:      'rgb(var(--i3x-text))',
   textMuted: 'rgb(var(--i3x-text-muted))',
+  translucent:    'rgb(var(--i3x-translucent))'
 }
 
-export function RelationshipGraph({ object }: RelationshipGraphProps) {
+export function RelationshipGraph({ object, onNodeClick }: RelationshipGraphProps) {
   const [relatedObjects, setRelatedObjects] = useState<RelatedObject[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
+  const { allRelationships } = useExplorerStore()
 
   useEffect(() => {
     loadRelationships()
@@ -56,17 +62,37 @@ export function RelationshipGraph({ object }: RelationshipGraphProps) {
       // Get all related objects with a single API call (no relationship type filter)
       const related = await client.getRelatedObjects(object.elementId)
 
-      // Map to our RelatedObject format
-      const graphRelationships: RelatedObject[] = related.map(r => ({
-        elementId: r.elementId,
-        displayName: r.displayName,
-        typeId: r.typeId,
-        isComposition: r.isComposition,
-        parentId: r.parentId,
-        // Determine relationship type based on parentId
-        relationshipType: r.parentId === object.elementId ? 'HasComponent' :
-                         object.parentId === r.elementId ? 'HasParent' : 'Related'
-      }))
+      const idmap : { [key: string]: RelatedObject } = {};
+      const graphRelationships: RelatedObject[] = new Array<RelatedObject>();
+      related.forEach((r) => {
+        var reltype : string = 'Other';
+        if (r.sourceRelationship != null) {
+          reltype = r.sourceRelationship;
+
+          allRelationships.forEach((rt) => {
+            if (rt.elementId == reltype) {
+              reltype = rt.displayName;
+            }
+          })
+        }
+        
+
+        if (idmap[r.elementId])
+        {
+          idmap[r.elementId].relationshipTypes.push(reltype);
+          return;
+        } 
+        const ro: RelatedObject = {
+          elementId: r.elementId,
+          displayName: r.displayName,
+          typeId: r.typeId,
+          isComposition: r.isComposition,
+          parentId: r.parentId,
+          relationshipTypes: [reltype]
+        }
+        idmap[r.elementId] = ro;
+        graphRelationships.push(ro);
+      })      
 
       setRelatedObjects(graphRelationships)
     } catch (err) {
@@ -111,19 +137,28 @@ export function RelationshipGraph({ object }: RelationshipGraphProps) {
     )
   }
 
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!svgRef.current) return
+    const rect = svgRef.current.getBoundingClientRect()
+    setTooltip(prev => prev ? { ...prev, x: e.clientX - rect.left, y: e.clientY - rect.top } : null)
+  }
+
   return (
     <div className="w-full overflow-auto">
       <svg
+        ref={svgRef}
         width="600"
         height="400"
         style={{ minWidth: '600px', backgroundColor: COLORS.surface, borderRadius: '6px' }}
+        onMouseMove={handleMouseMove}
       >
         {/* Connection lines */}
         {positions.map((pos, index) => {
           const related = relatedObjects[index]
-          const isParent = related.relationshipType === 'HasParent'
-          const isChild = related.relationshipType === 'HasChildren' || related.relationshipType === 'HasComponent'
+          const isParent = related.relationshipTypes[0] === 'HasParent'
+          const isChild = related.relationshipTypes[0] === 'HasChildren' || related.relationshipTypes[0] === 'HasComponent'
           const strokeColor = isParent ? COLORS.warning : isChild ? COLORS.success : COLORS.border
+          const linkWidth = relatedObjects[index].relationshipTypes.length * 2;
 
           return (
             <line
@@ -133,14 +168,18 @@ export function RelationshipGraph({ object }: RelationshipGraphProps) {
               x2={pos.x}
               y2={pos.y}
               stroke={strokeColor}
-              strokeWidth="2"
+              strokeWidth={linkWidth}
               strokeDasharray={isParent || isChild ? "none" : "5,5"}
             />
           )
         })}
 
         {/* Center object (selected) */}
-        <g transform={`translate(${CENTER_X - BOX_WIDTH / 2}, ${CENTER_Y - BOX_HEIGHT / 2})`}>
+        <g
+          transform={`translate(${CENTER_X - BOX_WIDTH / 2}, ${CENTER_Y - BOX_HEIGHT / 2})`}
+          onMouseEnter={() => setTooltip({ x: 0, y: 0, text: object.displayName })}
+          onMouseLeave={() => setTooltip(null)}
+        >
           <rect
             width={BOX_WIDTH}
             height={BOX_HEIGHT}
@@ -173,23 +212,27 @@ export function RelationshipGraph({ object }: RelationshipGraphProps) {
         {/* Related objects */}
         {relatedObjects.map((related, index) => {
           const pos = positions[index]
-          const isParent = related.relationshipType === 'HasParent'
-          const isChild = related.relationshipType === 'HasChildren' || related.relationshipType === 'HasComponent'
+          const isParent = related.relationshipTypes.includes('HasParent')
+          const isChild = related.relationshipTypes.includes('HasChildren') || related.relationshipTypes.includes('HasComponent')
 
           // Color code by relationship type
           const strokeColor = isParent ? COLORS.warning : isChild ? COLORS.success : COLORS.border
 
+          const fillColor = related.isComposition ? COLORS.surface : COLORS.translucent;
           return (
             <g
-              key={`${related.elementId}-${related.relationshipType}`}
+              key={`${related.elementId}-${related.relationshipTypes[0]}`}
               transform={`translate(${pos.x - BOX_WIDTH / 2}, ${pos.y - BOX_HEIGHT / 2})`}
               style={{ cursor: 'pointer' }}
+              onMouseEnter={() => setTooltip({ x: 0, y: 0, text: related.displayName })}
+              onMouseLeave={() => setTooltip(null)}
+              onClick={() => onNodeClick?.(related)}
             >
               <rect
                 width={BOX_WIDTH}
                 height={BOX_HEIGHT}
                 rx="6"
-                fill={COLORS.surface}
+                fill={fillColor}
                 stroke={strokeColor}
                 strokeWidth="2"
               />
@@ -210,11 +253,43 @@ export function RelationshipGraph({ object }: RelationshipGraphProps) {
                 fill={COLORS.textMuted}
                 fontSize="9"
               >
-                {related.relationshipType}
+                {related.relationshipTypes[0]}
               </text>
             </g>
           )
         })}
+
+        {/* Hover tooltip */}
+        {tooltip && (() => {
+          const pad = 6
+          const estimatedWidth = Math.min(Math.max(tooltip.text.length * 6.5 + pad * 2, 60), 320)
+          const tipH = 24
+          const tx = Math.min(tooltip.x + 12, 600 - estimatedWidth - 4)
+          const ty = tooltip.y - tipH - 8 < 4 ? tooltip.y + 16 : tooltip.y - tipH - 8
+          return (
+            <g style={{ pointerEvents: 'none' }}>
+              <rect
+                x={tx}
+                y={ty}
+                width={estimatedWidth}
+                height={tipH}
+                rx="4"
+                fill={COLORS.surface}
+                stroke={COLORS.border}
+                strokeWidth="1"
+                filter="drop-shadow(0 1px 3px rgba(0,0,0,0.25))"
+              />
+              <text
+                x={tx + pad}
+                y={ty + tipH / 2 + 4}
+                fill={COLORS.text}
+                fontSize="11"
+              >
+                {tooltip.text}
+              </text>
+            </g>
+          )
+        })()}
 
         {/* Legend */}
         <g transform="translate(10, 360)">
@@ -231,6 +306,7 @@ export function RelationshipGraph({ object }: RelationshipGraphProps) {
     </div>
   )
 }
+
 
 function truncateText(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text

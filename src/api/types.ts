@@ -32,7 +32,8 @@ export interface ObjectInstanceMinimal {
 
 // RFC 3.1.1 + 3.1.2 - Object Instance (Full)
 export interface ObjectInstance extends ObjectInstanceMinimal {
-  relationships?: Record<string, unknown>
+  relationships?: Record<string, unknown>,
+  sourceRelationship?: string
 }
 
 // RFC 4.2.1.1 - Last Known Value
@@ -44,6 +45,7 @@ export interface LastKnownValue {
   namespaceUri: string
   dataType?: string
   timestamp?: string
+  quality?: string
 }
 
 // RFC 4.2.1.2 - Historical Value

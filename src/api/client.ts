@@ -1,7 +1,7 @@
 import type {
   Namespace,
   ObjectType,
-  ObjectInstance,
+  ObjectInstance,  
   RelationshipType,
   LastKnownValue,
   HistoricalValue,
