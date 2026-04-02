@@ -16,9 +16,10 @@ export function ObjectDetail({ object }: ObjectDetailProps) {
   const [isLoadingValue, setIsLoadingValue] = useState(false)
   const [valueError, setValueError] = useState<string | null>(null)
   const [isRawDataExpanded, setIsRawDataExpanded] = useState(false)
+  const [isShowingMetadata, setIsShowingMetadata] = useState(false)
 
   const { activeSubscriptionId, addMonitoredItem, setBottomPanelExpanded } = useSubscriptionsStore()
-  const { selectItem, allObjects,setAllObjects } = useExplorerStore()
+  const { selectItem, allObjects,setAllObjects } = useExplorerStore()  
 
   useEffect(() => {
     loadValue()
@@ -32,7 +33,7 @@ export function ObjectDetail({ object }: ObjectDetailProps) {
     setValueError(null)
 
     try {
-      const result = await client.getValue(object.elementId)
+      const result = await client.getValue(object.elementId,1,isShowingMetadata)
       setValue(result)
     } catch (err) {
       setValueError(err instanceof Error ? err.message : 'Failed to load value')
@@ -40,6 +41,14 @@ export function ObjectDetail({ object }: ObjectDetailProps) {
       setIsLoadingValue(false)
     }
   }
+
+  const changeValueMode = async () => {
+    setIsShowingMetadata(!isShowingMetadata);        
+  }
+
+  useEffect(() => {
+    loadValue();
+  },[isShowingMetadata]);
 
   const selectObject = async (ro: RelatedObject) => {
     if (allObjects.length == 0)
@@ -71,6 +80,9 @@ export function ObjectDetail({ object }: ObjectDetailProps) {
       selectItem({type:"object",id: "",data: results[0]} as SelectedItem)    
     }
   }
+  
+  //const client = getClient()
+  let canSubscribe = true;
 
   const handleSubscribe = async () => {
     const client = getClient()
@@ -112,12 +124,12 @@ export function ObjectDetail({ object }: ObjectDetailProps) {
           </h2>
           <p className="text-sm text-i3x-text-muted">Object Instance</p>
         </div>
-        <button
+        {canSubscribe && <button
           onClick={handleSubscribe}
           className="px-3 py-1.5 text-xs bg-i3x-primary text-white rounded hover:bg-i3x-primary/80 transition-colors"
         >
           Subscribe
-        </button>
+        </button> }
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -174,6 +186,13 @@ export function ObjectDetail({ object }: ObjectDetailProps) {
               className="text-xs text-i3x-primary hover:text-i3x-primary/80"
             >
               {isLoadingValue ? 'Loading...' : 'Refresh'}
+            </button>
+            <button
+              onClick={changeValueMode}
+              disabled={isLoadingValue}
+              className="text-xs text-i3x-primary hover:text-i3x-primary/80"
+            >
+              {isShowingMetadata == true ? 'With Metadata' : 'Minimal'}
             </button>
           </div>
           {valueError ? (

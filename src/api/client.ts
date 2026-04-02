@@ -169,6 +169,23 @@ export class I3XClient {
     }
   }
 
+  async getCapabilities(): Promise<Record<string, unknown>> {
+    try {
+      let url = `${this.baseUrl}/info`
+      if (url.includes('://localhost:')) {
+        url = url.replace('://localhost:', '://127.0.0.1:')
+      }
+      const headers: Record<string, string> = { 'Accept': 'application/json' }
+      const authHeader = this.getAuthHeader()
+      if (authHeader) headers['Authorization'] = authHeader
+
+      return this.request<Record<string, unknown>>('GET','/info');
+      
+    } catch {
+      return {};
+    }
+  }
+
   // Exploratory Methods (RFC 4.1)
 
   async getNamespaces(): Promise<Namespace[]> {
@@ -250,10 +267,10 @@ export class I3XClient {
 
   // Value Methods (RFC 4.2.1)
 
-  async getValue(elementId: string, maxDepth = 1): Promise<LastKnownValue | null> {
+  async getValue(elementId: string, maxDepth = 1,metadata=false): Promise<LastKnownValue | null> {
     if (this.apiVersion === 'v1') {
       // v1: bulk results; flat {value, quality, timestamp} in result (no data array)
-      const raw = await this.request<unknown>('POST', '/objects/value', { elementIds: [elementId], maxDepth })
+      const raw = await this.request<unknown>('POST', '/objects/value', { elementIds: [elementId], maxDepth, includeMetadata:metadata })
       const results = extractV1BulkResults<Record<string, unknown>>(raw)
       const item = results.find(r => r.elementId === elementId && r.success)
       if (item?.result) {

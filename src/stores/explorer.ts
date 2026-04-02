@@ -30,7 +30,9 @@ interface ExplorerState {
   selectedItem: SelectedItem | null
   isLoading: boolean
   searchQuery: string
+  capabilities: Record<string, unknown>
 
+  setCapabilities: (capabilities: Record<string, unknown>) => void
   setNamespaces: (namespaces: Namespace[]) => void
   setObjectTypes: (types: ObjectType[]) => void
   setRelationshipTypes: (rels: RelationshipType[]) => void
@@ -47,6 +49,7 @@ interface ExplorerState {
 }
 
 export const useExplorerStore = create<ExplorerState>((set, get) => ({
+  capabilities: {},
   namespaces: [],
   objectTypes: [],
   objects: new Map(),
@@ -58,6 +61,7 @@ export const useExplorerStore = create<ExplorerState>((set, get) => ({
   isLoading: false,
   searchQuery: '',
 
+  setCapabilities: (capabilities) => set({ capabilities }),
   setNamespaces: (namespaces) => set({ namespaces }),
   setObjectTypes: (types) => set({ objectTypes: types }),
   setRelationshipTypes: (rels) => set({ allRelationships: rels }),
